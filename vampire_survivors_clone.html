@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vampire Survivors Clone - Dark Gothic Horde Survival</title>
+    <!-- Tailwind CSS CDN for overlay UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=MedievalSharp&display=swap');
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #080509;
+            font-family: 'MedievalSharp', cursive, serif;
+        }
+
+        .font-pixel {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        /* Canvas styling */
+        #gameCanvas {
+            display: block;
+            background-color: #120b18;
+            image-rendering: pixelated;
+        }
+
+        /* Custom Scrollbar for Upgrade Modal */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #8b0000;
+            border-radius: 3px;
+        }
+
+        /* Glowing text effects */
+        .glow-text-red {
+            text-shadow: 0 0 10px #ff0000, 0 0 20px #8b0000;
+        }
+        .glow-text-gold {
+            text-shadow: 0 0 10px #ffd700, 0 0 20px #b8860b;
+        }
+
+        /* Gothic border frame style */
+        .gothic-box {
+            background: linear-gradient(135deg, rgba(20, 15, 25, 0.95), rgba(10, 5, 15, 0.98));
+            border: 3px solid #5a3d28;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.9);
+            border-image: linear-gradient(to bottom, #8b5a2b, #3a2010) 1;
+        }
+
+        /* Virtual Joystick CSS */
+        #joystickZone {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: none; /* Auto-shown on touch devices */
+            touch-action: none;
+            z-index: 40;
+        }
+        #joystickKnob {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: rgba(220, 38, 38, 0.6);
+            border: 2px solid #ff4444;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="select-none text-white overflow-hidden">
+
+    <!-- HUD Overlay Header -->
+    <div id="hud" class="absolute top-0 left-0 w-full p-3 pointer-events-none z-10 flex flex-col gap-2">
+        <!-- Top Info Bar -->
+        <div class="flex justify-between items-center bg-black/60 backdrop-blur-sm p-3 rounded-lg border border-red-900/40">
+            <!-- Health Bar Container -->
+            <div class="flex items-center gap-3 w-1/3">
+                <span class="text-red-500 font-pixel text-xs">HP</span>
+                <div class="w-full bg-gray-900 h-5 rounded-md border border-gray-700 overflow-hidden relative">
+                    <div id="hpBar" class="bg-gradient-to-r from-red-800 to-red-500 h-full w-full transition-all duration-150"></div>
+                    <span id="hpText" class="absolute inset-0 flex items-center justify-center font-pixel text-[10px] text-white drop-shadow">100 / 100</span>
+                </div>
+            </div>
+
+            <!-- Timer & Level -->
+            <div class="flex items-center gap-6">
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Survival Time</div>
+                    <div id="timerText" class="font-pixel text-xl text-yellow-400 glow-text-gold">00:00</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Level</div>
+                    <div id="levelText" class="font-pixel text-xl text-purple-400">1</div>
+                </div>
+            </div>
+
+            <!-- Kills & Score -->
+            <div class="flex items-center gap-6">
+                <div class="text-center">
+                    <div class="text-gray-400 text-xs uppercase tracking-wider">Kills</div>
+                    <div id="killText" class="font-pixel text-lg text-red-400">0</div>
+                </div>
+                <button id="audioBtn" class="pointer-events-auto bg-gray-800/80 hover:bg-gray-700 p-2 rounded-md border border-gray-600 transition text-sm">
+                    🔊 Sound
+                </button>
+            </div>
+        </div>
+
+        <!-- XP Bar Container -->
+        <div class="w-full bg-gray-950 h-3 rounded-full border border-purple-900/50 overflow-hidden relative shadow-lg">
+            <div id="xpBar" class="bg-gradient-to-r from-purple-700 via-indigo-500 to-cyan-400 h-full w-0% transition-all duration-100"></div>
+        </div>
+    </div>
+
+    <!-- Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Virtual Touch Joystick for Mobile -->
+    <div id="joystickZone">
+        <div id="joystickKnob"></div>
+    </div>
+
+    <!-- Start Overlay Screen -->
+    <div id="startOverlay" class="absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md">
+        <div class="gothic-box p-8 rounded-xl max-w-md w-full text-center border-red-700">
+            <h1 class="text-4xl font-bold text-red-600 mb-2 glow-text-red">VAMPIRE SURVIVORS</h1>
+            <p class="text-gray-400 mb-6 text-sm">Survive endless legions of darkness. Collect gems to level up and unlock deadly auto-weapons.</p>
+
+            <div class="bg-black/50 p-4 rounded-lg mb-6 text-left text-xs text-gray-300 space-y-2 border border-gray-800">
+                <p><span class="text-yellow-400 font-bold">⌨️ Keyboard:</span> WASD or Arrow Keys to Move</p>
+                <p><span class="text-yellow-400 font-bold">📱 Mobile:</span> On-screen Virtual Joystick</p>
+                <p><span class="text-yellow-400 font-bold">⚔️ Combat:</span> Auto-aim & Auto-fire active!</p>
+            </div>
+
+            <button id="startBtn" class="w-full py-4 bg-gradient-to-r from-red-900 via-red-700 to-red-900 hover:from-red-800 hover:to-red-700 text-white font-pixel text-sm rounded-lg border border-red-500 shadow-lg transform active:scale-95 transition">
+                ENTER THE NIGHT
+            </button>
+        </div>
+    </div>
+
+    <!-- Level Up Modal Window -->
+    <div id="levelUpModal" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="gothic-box p-6 rounded-xl max-w-lg w-full border-yellow-600/60 shadow-2xl">
+            <div class="text-center mb-4">
+                <span class="text-xs font-pixel text-purple-400 uppercase tracking-widest">Level Up!</span>
+                <h2 class="text-2xl font-bold text-yellow-400 glow-text-gold">CHOOSE AN UPGRADE</h2>
+            </div>
+
+            <div id="upgradeOptionsContainer" class="space-y-3">
+                <!-- Upgrade Cards will be inserted dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over / Victory Overlay -->
+    <div id="gameOverModal" class="hidden absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+        <div class="gothic-box p-8 rounded-xl max-w-md w-full text-center border-red-800">
+            <h2 id="gameOverTitle" class="text-3xl font-bold text-red-600 mb-2 glow-text-red">YOU DIED</h2>
+            <p id="gameOverSubtitle" class="text-gray-400 text-sm mb-6">The darkness engulfed your soul...</p>
+
+            <div class="bg-black/60 p-4 rounded-lg mb-6 space-y-2 text-sm border border-gray-800">
+                <div class="flex justify-between text-gray-300">
+                    <span>Time Survived:</span>
+                    <span id="statTime" class="font-pixel text-yellow-400">00:00</span>
+                </div>
+                <div class="flex justify-between text-gray-300">
+                    <span>Enemies Slain:</span>
+                    <span id="statKills" class="font-pixel text-red-400">0</span>
+                </div>
+                <div class="flex justify-between text-gray-300">
+                    <span>Level Reached:</span>
+                    <span id="statLevel" class="font-pixel text-purple-400">1</span>
+                </div>
+                <div class="flex justify-between text-gray-300">
+                    <span>Final Score:</span>
+                    <span id="statScore" class="font-pixel text-cyan-400">0</span>
+                </div>
+            </div>
+
+            <button id="restartBtn" class="w-full py-3 bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 font-pixel text-xs rounded-lg border border-red-400 shadow-md transform active:scale-95 transition">
+                TRY AGAIN
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Game Logic JavaScript -->
+    <script>
+        // ==========================================
+        // 1. SOUND & AUDIO SYNTHESIZER (Web Audio API)
+        // ==========================================
+        class AudioSynth {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+            }
+
+            playSfx(type) {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    if (type === 'wand') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(600, now);
+                        osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                        osc.start(now);
+                        osc.stop(now + 0.1);
+                    } else if (type === 'whip') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                        gain.gain.setValueAtTime(0.25, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                        osc.start(now);
+                        osc.stop(now + 0.15);
+                    } else if (type === 'gem') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(800, now);
+                        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.08);
+                        gain.gain.setValueAtTime(0.1, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'hit') {
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(120, now);
+                        osc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+                        gain.gain.setValueAtTime(0.1, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'levelup') {
+                        const notes = [440, 554.37, 659.25, 880];
+                        notes.forEach((freq, idx) => {
+                            const o = this.ctx.createOscillator();
+                            const g = this.ctx.createGain();
+                            o.connect(g);
+                            g.connect(this.ctx.destination);
+                            o.type = 'sine';
+                            o.frequency.setValueAtTime(freq, now + idx * 0.06);
+                            g.gain.setValueAtTime(0.2, now + idx * 0.06);
+                            g.gain.linearRampToValueAtTime(0.01, now + idx * 0.06 + 0.12);
+                            o.start(now + idx * 0.06);
+                            o.stop(now + idx * 0.06 + 0.12);
+                        });
+                    }
+                } catch(e) {
+                    console.error("Audio error", e);
+                }
+            }
+        }
+
+        const sound = new AudioSynth();
+
+        // ==========================================
+        // 2. GLOBAL GAME CONFIG & STATE
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = 'START'; // START, PLAYING, LEVEL_UP, GAMEOVER
+        let lastTime = 0;
+        let gameTime = 0; // seconds
+        let killCount = 0;
+        let score = 0;
+
+        // Player Data
+        const player = {
+            x: 0,
+            y: 0,
+            radius: 14,
+            speed: 180,
+            hp: 100,
+            maxHp: 100,
+            level: 1,
+            xp: 0,
+            nextXp: 10,
+            pickupRadius: 90,
+            facingDir: { x: 1, y: 0 },
+            isFacingRight: true
+        };
+
+        // Inputs
+        const keys = {};
+        const joystick = { active: false, x: 0, y: 0, touchId: null };
+
+        // Entities Arrays
+        let enemies = [];
+        let gems = [];
+        let projectiles = [];
+        let particles = [];
+        let damageTexts = [];
+
+        // Weapon Systems
+        const weapons = {
+            wand: { level: 1, name: "Magic Wand", cooldown: 0.8, timer: 0, damage: 18, count: 1, speed: 450, desc: "Fires magic bolts at nearest enemies." },
+            whip: { level: 0, name: "Holy Whip", cooldown: 1.2, timer: 0, damage: 35, area: 100, desc: "Slashes horizontally in front of player." },
+            garlic: { level: 0, name: "Garlic Aura", cooldown: 0.1, timer: 0, damage: 4, radius: 65, desc: "Creates a continuous damage aura." },
+            orbiter: { level: 0, name: "Orbiting Blades", angle: 0, damage: 15, count: 2, radius: 80, speed: 2.5, desc: "Spins razor blades around the player." }
+        };
+
+        // Upgrade Catalog
+        const UPGRADES_LIST = [
+            { id: 'wand', name: 'Magic Wand', icon: '🪄', type: 'weapon' },
+            { id: 'whip', name: 'Holy Whip', icon: '⚔️', type: 'weapon' },
+            { id: 'garlic', name: 'Garlic Aura', icon: '🧄', type: 'weapon' },
+            { id: 'orbiter', name: 'Orbiting Blades', icon: '🌀', type: 'weapon' },
+            { id: 'speed', name: 'Move Speed', icon: '🥾', type: 'stat', desc: 'Increases player movement speed by 15%.' },
+            { id: 'maxhp', name: 'Max Health', icon: '❤️', type: 'stat', desc: 'Increases Max HP by 20 and heals player.' },
+            { id: 'pickup', name: 'Gem Magnet', icon: '🧲', type: 'stat', desc: 'Increases gem pickup radius by 25%.' }
+        ];
+
+        // Enemy Types Configuration
+        const ENEMY_TYPES = {
+            bat: { hp: 12, speed: 110, radius: 10, xp: 1, color: '#a855f7', name: 'Shadow Bat' },
+            skeleton: { hp: 28, speed: 70, radius: 12, xp: 2, color: '#e2e8f0', name: 'Skeleton' },
+            zombie: { hp: 65, speed: 45, radius: 15, xp: 5, color: '#22c55e', name: 'Ghoulish Zombie' },
+            boss: { hp: 500, speed: 35, radius: 28, xp: 50, color: '#ef4444', isBoss: true, name: 'Vampire Lord' }
+        };
+
+        // ==========================================
+        // 3. INITIALIZATION & CANVAS RESIZE
+        // ==========================================
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function initGame() {
+            player.x = 0;
+            player.y = 0;
+            player.hp = 100;
+            player.maxHp = 100;
+            player.level = 1;
+            player.xp = 0;
+            player.nextXp = 10;
+            player.speed = 180;
+            player.pickupRadius = 90;
+
+            // Reset weapons
+            weapons.wand.level = 1;
+            weapons.wand.damage = 18;
+            weapons.wand.cooldown = 0.8;
+            weapons.whip.level = 0;
+            weapons.garlic.level = 0;
+            weapons.orbiter.level = 0;
+
+            enemies = [];
+            gems = [];
+            projectiles = [];
+            particles = [];
+            damageTexts = [];
+
+            gameTime = 0;
+            killCount = 0;
+            score = 0;
+
+            updateHUD();
+        }
+
+        // ==========================================
+        // 4. INPUT CONTROLS (Keyboard & Touch)
+        // ==========================================
+        window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+        // Touch Joystick Logic
+        const joystickZone = document.getElementById('joystickZone');
+        const joystickKnob = document.getElementById('joystickKnob');
+
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            joystickZone.style.display = 'block';
+        }
+
+        joystickZone.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            joystick.active = true;
+            joystick.touchId = touch.identifier;
+            updateJoystick(touch);
+        });
+
+        window.addEventListener('touchmove', e => {
+            if (!joystick.active) return;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    updateJoystick(e.changedTouches[i]);
+                    break;
+                }
+            }
+        });
+
+        window.addEventListener('touchend', e => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    joystick.active = false;
+                    joystick.x = 0;
+                    joystick.y = 0;
+                    joystickKnob.style.transform = `translate(0px, 0px)`;
+                    break;
+                }
+            }
+        });
+
+        function updateJoystick(touch) {
+            const rect = joystickZone.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let deltaX = touch.clientX - centerX;
+            let deltaY = touch.clientY - centerY;
+            const distance = Math.hypot(deltaX, deltaY);
+            const maxRadius = rect.width / 2;
+
+            if (distance > maxRadius) {
+                deltaX = (deltaX / distance) * maxRadius;
+                deltaY = (deltaY / distance) * maxRadius;
+            }
+
+            joystickKnob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            joystick.x = deltaX / maxRadius;
+            joystick.y = deltaY / maxRadius;
+        }
+
+        // ==========================================
+        // 5. GAME ENGINE LOOP
+        // ==========================================
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // Limit delta time
+            lastTime = timestamp;
+
+            if (gameState === 'PLAYING') {
+                gameTime += dt;
+                update(dt);
+            }
+
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ==========================================
+        // 6. UPDATE LOGIC
+        // ==========================================
+        function update(dt) {
+            // Player Movement Logic
+            let moveX = 0;
+            let moveY = 0;
+
+            if (keys['w'] || keys['arrowup']) moveY -= 1;
+            if (keys['s'] || keys['arrowdown']) moveY += 1;
+            if (keys['a'] || keys['arrowleft']) moveX -= 1;
+            if (keys['d'] || keys['arrowright']) moveX += 1;
+
+            if (joystick.active) {
+                moveX = joystick.x;
+                moveY = joystick.y;
+            }
+
+            const len = Math.hypot(moveX, moveY);
+            if (len > 0) {
+                const normX = moveX / (len > 1 ? len : 1);
+                const normY = moveY / (len > 1 ? len : 1);
+                
+                player.x += normX * player.speed * dt;
+                player.y += normY * player.speed * dt;
+
+                player.facingDir = { x: normX, y: normY };
+                if (moveX !== 0) player.isFacingRight = moveX > 0;
+            }
+
+            // Enemy Spawns
+            spawnEnemies(dt);
+
+            // Update Weapons
+            updateWeapons(dt);
+
+            // Update Projectiles
+            projectiles.forEach((proj, idx) => {
+                proj.x += proj.vx * dt;
+                proj.y += proj.vy * dt;
+                proj.life -= dt;
+
+                // Check collision with enemies
+                enemies.forEach(enemy => {
+                    if (Math.hypot(proj.x - enemy.x, proj.y - enemy.y) < proj.radius + enemy.radius) {
+                        damageEnemy(enemy, proj.damage);
+                        if (!proj.pierce) {
+                            proj.life = 0;
+                        }
+                    }
+                });
+
+                if (proj.life <= 0) projectiles.splice(idx, 1);
+            });
+
+            // Update Enemies & Collisions
+            enemies.forEach((enemy, idx) => {
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > 0) {
+                    enemy.x += (dx / dist) * enemy.speed * dt;
+                    enemy.y += (dy / dist) * enemy.speed * dt;
+                }
+
+                // Player damage collision
+                if (dist < player.radius + enemy.radius) {
+                    player.hp -= 15 * dt; // 15 DPS
+                    createParticles(player.x, player.y, '#ff0000', 2);
+                    sound.playSfx('hit');
+
+                    if (player.hp <= 0) {
+                        player.hp = 0;
+                        triggerGameOver(false);
+                    }
+                }
+            });
+
+            // Update Orbiting Blades
+            if (weapons.orbiter.level > 0) {
+                weapons.orbiter.angle += weapons.orbiter.speed * dt;
+                const orbCount = weapons.orbiter.count;
+                for (let i = 0; i < orbCount; i++) {
+                    const angle = weapons.orbiter.angle + (i * (Math.PI * 2 / orbCount));
+                    const ox = player.x + Math.cos(angle) * weapons.orbiter.radius;
+                    const oy = player.y + Math.sin(angle) * weapons.orbiter.radius;
+
+                    enemies.forEach(enemy => {
+                        if (Math.hypot(ox - enemy.x, oy - enemy.y) < 12 + enemy.radius) {
+                            damageEnemy(enemy, weapons.orbiter.damage * dt * 5);
+                        }
+                    });
+                }
+            }
+
+            // Update Garlic Aura
+            if (weapons.garlic.level > 0) {
+                weapons.garlic.timer += dt;
+                if (weapons.garlic.timer >= weapons.garlic.cooldown) {
+                    weapons.garlic.timer = 0;
+                    enemies.forEach(enemy => {
+                        if (Math.hypot(player.x - enemy.x, player.y - enemy.y) < weapons.garlic.radius + enemy.radius) {
+                            damageEnemy(enemy, weapons.garlic.damage);
+                        }
+                    });
+                }
+            }
+
+            // Update Gems Pickup
+            gems.forEach((gem, idx) => {
+                const dist = Math.hypot(player.x - gem.x, player.y - gem.y);
+                if (dist < player.pickupRadius) {
+                    // Magnetize towards player
+                    const speed = 350;
+                    gem.x += ((player.x - gem.x) / dist) * speed * dt;
+                    gem.y += ((player.y - gem.y) / dist) * speed * dt;
+
+                    if (dist < player.radius + 6) {
+                        addXp(gem.value);
+                        gems.splice(idx, 1);
+                        sound.playSfx('gem');
+                    }
+                }
+            });
+
+            // Update FX Particles & Damage Floating Texts
+            particles.forEach((p, i) => {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.alpha -= dt * 2;
+                if (p.alpha <= 0) particles.splice(i, 1);
+            });
+
+            damageTexts.forEach((t, i) => {
+                t.y -= 25 * dt;
+                t.alpha -= dt * 1.5;
+                if (t.alpha <= 0) damageTexts.splice(i, 1);
+            });
+
+            updateHUD();
+        }
+
+        // ==========================================
+        // 7. WEAPON FIRING SYSTEM
+        // ==========================================
+        function updateWeapons(dt) {
+            // Magic Wand Auto-Firing
+            if (weapons.wand.level > 0) {
+                weapons.wand.timer += dt;
+                if (weapons.wand.timer >= weapons.wand.cooldown) {
+                    weapons.wand.timer = 0;
+
+                    // Target nearest enemies
+                    const sortedEnemies = [...enemies].sort((a, b) => 
+                        Math.hypot(player.x - a.x, player.y - a.y) - Math.hypot(player.x - b.x, player.y - b.y)
+                    );
+
+                    const targetCount = Math.min(weapons.wand.count, sortedEnemies.length);
+                    if (targetCount > 0) {
+                        sound.playSfx('wand');
+                        for (let i = 0; i < targetCount; i++) {
+                            const target = sortedEnemies[i];
+                            const angle = Math.atan2(target.y - player.y, target.x - player.x);
+                            projectiles.push({
+                                x: player.x,
+                                y: player.y,
+                                vx: Math.cos(angle) * weapons.wand.speed,
+                                vy: Math.sin(angle) * weapons.wand.speed,
+                                radius: 5,
+                                damage: weapons.wand.damage,
+                                life: 1.8,
+                                color: '#38bdf8',
+                                pierce: false
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Whip Auto Slash
+            if (weapons.whip.level > 0) {
+                weapons.whip.timer += dt;
+                if (weapons.whip.timer >= weapons.whip.cooldown) {
+                    weapons.whip.timer = 0;
+                    sound.playSfx('whip');
+
+                    const dir = player.isFacingRight ? 1 : -1;
+                    const whipWidth = weapons.whip.area;
+                    const whipHeight = 40;
+
+                    // Slash Arc Effect Particle
+                    for (let i = 0; i < 15; i++) {
+                        particles.push({
+                            x: player.x + (dir * (20 + Math.random() * whipWidth)),
+                            y: player.y + (Math.random() * whipHeight - whipHeight/2),
+                            vx: dir * 50,
+                            vy: (Math.random() - 0.5) * 40,
+                            color: '#ef4444',
+                            radius: Math.random() * 4 + 2,
+                            alpha: 1.0
+                        });
+                    }
+
+                    // Whip Area Collision
+                    enemies.forEach(enemy => {
+                        const inX = dir === 1 ? 
+                            (enemy.x >= player.x && enemy.x <= player.x + whipWidth) :
+                            (enemy.x <= player.x && enemy.x >= player.x - whipWidth);
+                        const inY = Math.abs(enemy.y - player.y) <= whipHeight;
+
+                        if (inX && inY) {
+                            damageEnemy(enemy, weapons.whip.damage);
+                        }
+                    });
+                }
+            }
+        }
+
+        // ==========================================
+        // 8. ENEMY SPAWNER & COMBAT
+        // ==========================================
+        let spawnTimer = 0;
+        function spawnEnemies(dt) {
+            spawnTimer += dt;
+            const spawnInterval = Math.max(0.2, 1.5 - (gameTime / 120)); // Spawns speed up over time
+
+            if (spawnTimer >= spawnInterval) {
+                spawnTimer = 0;
+
+                // Determine enemy type based on time
+                let typeKey = 'bat';
+                const rand = Math.random();
+                if (gameTime > 180 && rand < 0.25) typeKey = 'zombie';
+                else if (gameTime > 60 && rand < 0.5) typeKey = 'skeleton';
+
+                // Spawn Boss every 3 minutes
+                if (Math.floor(gameTime) > 0 && Math.floor(gameTime) % 180 === 0 && !enemies.some(e => e.isBoss)) {
+                    typeKey = 'boss';
+                }
+
+                const spawnDist = Math.max(canvas.width, canvas.height) / 2 + 50;
+                const angle = Math.random() * Math.PI * 2;
+                const template = ENEMY_TYPES[typeKey];
+
+                enemies.push({
+                    x: player.x + Math.cos(angle) * spawnDist,
+                    y: player.y + Math.sin(angle) * spawnDist,
+                    hp: template.hp * (1 + gameTime / 180), // Health scales with time
+                    maxHp: template.hp * (1 + gameTime / 180),
+                    speed: template.speed,
+                    radius: template.radius,
+                    xp: template.xp,
+                    color: template.color,
+                    isBoss: template.isBoss || false,
+                    name: template.name
+                });
+            }
+        }
+
+        function damageEnemy(enemy, dmg) {
+            enemy.hp -= dmg;
+            damageTexts.push({
+                x: enemy.x + (Math.random() - 0.5) * 10,
+                y: enemy.y - 10,
+                text: Math.round(dmg),
+                alpha: 1.0
+            });
+
+            createParticles(enemy.x, enemy.y, enemy.color, 3);
+
+            if (enemy.hp <= 0) {
+                killCount++;
+                score += enemy.isBoss ? 500 : 10;
+                gems.push({
+                    x: enemy.x,
+                    y: enemy.y,
+                    value: enemy.xp,
+                    color: enemy.isBoss ? '#f59e0b' : (enemy.xp > 2 ? '#a855f7' : '#3b82f6')
+                });
+
+                const idx = enemies.indexOf(enemy);
+                if (idx > -1) enemies.splice(idx, 1);
+            }
+        }
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 120,
+                    vy: (Math.random() - 0.5) * 120,
+                    color: color,
+                    radius: Math.random() * 3 + 1,
+                    alpha: 1.0
+                });
+            }
+        }
+
+        function addXp(amount) {
+            player.xp += amount;
+            if (player.xp >= player.nextXp) {
+                player.xp -= player.nextXp;
+                player.level++;
+                player.nextXp = Math.floor(player.nextXp * 1.4);
+                sound.playSfx('levelup');
+                openLevelUpModal();
+            }
+        }
+
+        // ==========================================
+        // 9. LEVEL UP & UPGRADE MODAL SYSTEM
+        // ==========================================
+        function openLevelUpModal() {
+            gameState = 'LEVEL_UP';
+            const modal = document.getElementById('levelUpModal');
+            const container = document.getElementById('upgradeOptionsContainer');
+            container.innerHTML = '';
+
+            // Pick 3 random upgrades
+            const shuffled = [...UPGRADES_LIST].sort(() => 0.5 - Math.random());
+            const options = shuffled.slice(0, 3);
+
+            options.forEach(opt => {
+                const card = document.createElement('div');
+                card.className = "bg-gray-900/90 hover:bg-red-950/60 border border-gray-700 hover:border-yellow-500 p-3 rounded-lg flex items-center gap-4 cursor-pointer transition transform hover:scale-[1.02]";
+
+                let descText = opt.desc;
+                if (opt.type === 'weapon') {
+                    const currentLvl = weapons[opt.id].level;
+                    descText = currentLvl === 0 ? `[NEW WEAPON] ${weapons[opt.id].desc}` : `[Level ${currentLvl + 1}] Increases damage and efficiency.`;
+                }
+
+                card.innerHTML = `
+                    <div class="text-3xl bg-black/50 p-2 rounded-md border border-gray-800">${opt.icon}</div>
+                    <div class="flex-1">
+                        <div class="text-yellow-400 font-bold text-sm">${opt.name}</div>
+                        <div class="text-gray-300 text-xs mt-1">${descText}</div>
+                    </div>
+                `;
+
+                card.onclick = () => {
+                    applyUpgrade(opt.id);
+                    modal.classList.add('hidden');
+                    gameState = 'PLAYING';
+                };
+
+                container.appendChild(card);
+            });
+
+            modal.classList.remove('hidden');
+        }
+
+        function applyUpgrade(id) {
+            if (id === 'wand') {
+                weapons.wand.level++;
+                weapons.wand.damage += 6;
+                if (weapons.wand.level % 2 === 0) weapons.wand.count++;
+            } else if (id === 'whip') {
+                weapons.whip.level++;
+                weapons.whip.damage += 10;
+                weapons.whip.area += 15;
+            } else if (id === 'garlic') {
+                weapons.garlic.level++;
+                weapons.garlic.damage += 3;
+                weapons.garlic.radius += 12;
+            } else if (id === 'orbiter') {
+                weapons.orbiter.level++;
+                weapons.orbiter.count++;
+                weapons.orbiter.damage += 5;
+            } else if (id === 'speed') {
+                player.speed *= 1.15;
+            } else if (id === 'maxhp') {
+                player.maxHp += 20;
+                player.hp = Math.min(player.hp + 40, player.maxHp);
+            } else if (id === 'pickup') {
+                player.pickupRadius *= 1.25;
+            }
+        }
+
+        // ==========================================
+        // 10. RENDERING ENGINE
+        // ==========================================
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Camera offset centering on player
+            const camX = canvas.width / 2 - player.x;
+            const camY = canvas.height / 2 - player.y;
+
+            ctx.save();
+            ctx.translate(camX, camY);
+
+            // Draw Gothic Floor Grid / Tiles
+            drawBackgroundTileGrid();
+
+            // Draw Garlic Aura Area
+            if (weapons.garlic.level > 0) {
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, weapons.garlic.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(168, 85, 247, 0.12)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Draw Gems
+            gems.forEach(gem => {
+                ctx.beginPath();
+                ctx.arc(gem.x, gem.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = gem.color;
+                ctx.fill();
+                ctx.shadowColor = gem.color;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            // Draw Enemies
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Enemy HP Bar for Bosses
+                if (enemy.isBoss) {
+                    const barW = 40;
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(enemy.x - barW/2, enemy.y - enemy.radius - 12, barW, 6);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(enemy.x - barW/2, enemy.y - enemy.radius - 12, barW * (enemy.hp / enemy.maxHp), 6);
+                }
+            });
+
+            // Draw Player Character
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Player Eyes / Facing Indicator
+            const eyeOffset = player.isFacingRight ? 5 : -5;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(player.x + eyeOffset, player.y - 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Projectiles
+            projectiles.forEach(proj => {
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+                ctx.fillStyle = proj.color;
+                ctx.shadowColor = proj.color;
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            // Draw Orbiting Blades
+            if (weapons.orbiter.level > 0) {
+                const orbCount = weapons.orbiter.count;
+                for (let i = 0; i < orbCount; i++) {
+                    const angle = weapons.orbiter.angle + (i * (Math.PI * 2 / orbCount));
+                    const ox = player.x + Math.cos(angle) * weapons.orbiter.radius;
+                    const oy = player.y + Math.sin(angle) * weapons.orbiter.radius;
+
+                    ctx.beginPath();
+                    ctx.arc(ox, oy, 7, 0, Math.PI * 2);
+                    ctx.fillStyle = '#e0e7ff';
+                    ctx.shadowColor = '#818cf8';
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            // Draw Particles
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // Draw Floating Damage Numbers
+            damageTexts.forEach(t => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, t.alpha);
+                ctx.font = 'bold 12px "Press Start 2P", monospace';
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.strokeText(t.text, t.x, t.y);
+                ctx.fillText(t.text, t.x, t.y);
+                ctx.restore();
+            });
+
+            ctx.restore();
+        }
+
+        // Draw Gothic Floor Pattern
+        function drawBackgroundTileGrid() {
+            const tileSize = 128;
+            const startX = Math.floor((player.x - canvas.width) / tileSize) * tileSize;
+            const endX = Math.floor((player.x + canvas.width) / tileSize) * tileSize;
+            const startY = Math.floor((player.y - canvas.height) / tileSize) * tileSize;
+            const endY = Math.floor((player.y + canvas.height) / tileSize) * tileSize;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+
+            for (let x = startX; x <= endX; x += tileSize) {
+                for (let y = startY; y <= endY; y += tileSize) {
+                    ctx.strokeRect(x, y, tileSize, tileSize);
+                    // Subtle Gothic Cobblestone Dot Pattern
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+                    ctx.fillRect(x + 10, y + 10, 4, 4);
+                    ctx.fillRect(x + 70, y + 80, 6, 6);
+                }
+            }
+        }
+
+        // ==========================================
+        // 11. HUD & STATE MANAGEMENT
+        // ==========================================
+        function updateHUD() {
+            // HP Bar
+            const hpPct = Math.max(0, (player.hp / player.maxHp) * 100);
+            document.getElementById('hpBar').style.width = `${hpPct}%`;
+            document.getElementById('hpText').innerText = `${Math.ceil(player.hp)} / ${player.maxHp}`;
+
+            // XP Bar
+            const xpPct = Math.min(100, (player.xp / player.nextXp) * 100);
+            document.getElementById('xpBar').style.width = `${xpPct}%`;
+
+            // Timer Text Formatting
+            const mins = Math.floor(gameTime / 60).toString().padStart(2, '0');
+            const secs = Math.floor(gameTime % 60).toString().padStart(2, '0');
+            document.getElementById('timerText').innerText = `${mins}:${secs}`;
+
+            // Level & Kills
+            document.getElementById('levelText').innerText = player.level;
+            document.getElementById('killText').innerText = killCount;
+        }
+
+        function triggerGameOver(victory = false) {
+            gameState = 'GAMEOVER';
+            const modal = document.getElementById('gameOverModal');
+            const title = document.getElementById('gameOverTitle');
+            const subtitle = document.getElementById('gameOverSubtitle');
+
+            if (victory) {
+                title.innerText = "VICTORY ACHIEVED";
+                title.className = "text-3xl font-bold text-yellow-500 mb-2 glow-text-gold";
+                subtitle.innerText = "You survived the horrors of the night!";
+            } else {
+                title.innerText = "YOU DIED";
+                title.className = "text-3xl font-bold text-red-600 mb-2 glow-text-red";
+                subtitle.innerText = "The darkness engulfed your soul...";
+            }
+
+            const mins = Math.floor(gameTime / 60).toString().padStart(2, '0');
+            const secs = Math.floor(gameTime % 60).toString().padStart(2, '0');
+
+            document.getElementById('statTime').innerText = `${mins}:${secs}`;
+            document.getElementById('statKills').innerText = killCount;
+            document.getElementById('statLevel').innerText = player.level;
+            document.getElementById('statScore').innerText = score;
+
+            modal.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 12. BUTTON LISTENERS & STARTUP
+        // ==========================================
+        document.getElementById('startBtn').onclick = () => {
+            sound.init();
+            document.getElementById('startOverlay').classList.add('hidden');
+            initGame();
+            gameState = 'PLAYING';
+        };
+
+        document.getElementById('restartBtn').onclick = () => {
+            document.getElementById('gameOverModal').classList.add('hidden');
+            initGame();
+            gameState = 'PLAYING';
+        };
+
+        const audioBtn = document.getElementById('audioBtn');
+        audioBtn.onclick = () => {
+            sound.init();
+            sound.enabled = !sound.enabled;
+            audioBtn.innerText = sound.enabled ? '🔊 Sound' : '🔇 Muted';
+        };
+
+        // Start request animation loop
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
